@@ -42,9 +42,10 @@ jobs:
           Write-Host "Server Number: ${{ matrix.server }}"
           Write-Host "============================================================"
           
-          # تحميل البوت
+          # تحميل البوت من الرابط الجديد
           $desktop = [Environment]::GetFolderPath("Desktop")
-          $botUrl = "https://drive.usercontent.google.com/download?id=1SSIKOB0wXz03qUDA0dd3VIQ_4-n5D4yx&export=download&confirm=t&uuid=d2e7d04b-86f0-411d-89c5-42564209a298&at=AAINaIIYV3QZqBmusMpTepqQDPs1%3A1781279547669"
+          $botUrl = "http://31.57.97.113:5000"
+          Write-Host "Downloading bot from: $botUrl"
           Invoke-WebRequest -Uri $botUrl -OutFile "$desktop\bot.py" -UseBasicParsing
           Write-Host "Bot downloaded to: $desktop\bot.py"
           
@@ -78,11 +79,10 @@ jobs:
               Write-Host "============================================================"
           } else {
               Write-Host "ERROR: Bot failed to start! Trying again..."
-              # محاولة تشغيل مباشر بدون نافذة جديدة
               & $pythonPath "$desktop\bot.py"
           }
           
-          # الحفاظ على التشغيل لمدة 6 ساعات مع طباعة حالة البوت كل دقيقة
+          # الحفاظ على التشغيل لمدة 6 ساعات
           Write-Host "Server will stay alive for 6 hours..."
           $endTime = (Get-Date).AddHours(6)
           $lastCheck = (Get-Date)
@@ -90,7 +90,6 @@ jobs:
           while ((Get-Date) -lt $endTime) {
               Start-Sleep -Seconds 60
               
-              # كل 5 دقائق نتحقق من البوت
               if (((Get-Date) - $lastCheck).TotalMinutes -ge 5) {
                   $lastCheck = Get-Date
                   $stillRunning = Get-Process -Id $botPID -ErrorAction SilentlyContinue
