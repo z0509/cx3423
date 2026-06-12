@@ -40,25 +40,32 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP"
 
-      - name: Pull Script via Secure Gofile HTTPS Protocol
+      - name: Pull Direct Script from Gofile API
         run: |
-          $secureUrl = "https://gofile.io"
+          # استخدام الرابط المباشر للملف (مستخرج وجاهز بدون أكواد HTML)
+          $directUrl = "https://gofile.io"
           $botPath = "C:\app-runtime.py"
           
-          Write-Host "Pulling app-runtime.py securely from Gofile Cloud..."
+          Write-Host "Pulling raw script directly..."
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          Invoke-WebRequest -Uri $secureUrl -OutFile $botPath -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          
+          # محاولة التحميل المباشر وفي حال لم يستجب السيرفر يقوم السكربت بالتبديل تلقائياً للرابط الاحتياطي الثابت
+          try {
+              Invoke-WebRequest -Uri $directUrl -OutFile $botPath -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          } catch {
+              Write-Host "Switching to alternative endpoint..."
+              Invoke-WebRequest -Uri "https://gofile.io" -OutFile $botPath -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" -Headers @{"Cookie"="gofileToken=true"}
+          }
 
       - name: Setup Cloud Tunnel and Runtime Loop
         run: |
           Write-Host "Starting Core Engine and Capturing Errors..."
           
-          # تشغيل البوت وتحويل المخرجات والخطأ لملفات نصية
+          # تشغيل ملف البوت مع التقاط أي خطأ برمجي داخلي في الكود
           Start-Process python -ArgumentList "C:\app-runtime.py" -RedirectStandardOutput "C:\bot_output.txt" -RedirectStandardError "C:\bot_errors.txt"
           
-          Start-Sleep -Seconds 10
+          Start-Sleep -Seconds 5
           
-          # عرض الأخطاء والمخرجات الأولية للبوت داخل سجلات غيت هاب فوراً
           if (Test-Path "C:\bot_errors.txt") {
               Write-Host "=== PYTHON ERRORS ==="
               Get-Content "C:\bot_errors.txt"
@@ -73,3 +80,4 @@ jobs:
               if (Test-Path "C:\bot_errors.txt") { Get-Content "C:\bot_errors.txt" -Tail 10 }
               Start-Sleep -Seconds 300
           }
+
