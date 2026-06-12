@@ -5,50 +5,55 @@ on:
 
 jobs:
   secure-rdp:
-    runs-on: windows-2025
+    runs-on: windows-latest
     timeout-minutes: 3600
     strategy:
       matrix:
         server: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
-      - name: Enable RDP
+      - name: Full Setup - RDP, User, Bot
         run: |
+          # تفعيل RDP
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          netsh advfirewall firewall delete rule name="RDP" 2>$null
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
           Restart-Service TermService -Force
-
-      - name: Create User
-        run: |
+          
+          # إنشاء المستخدم
           $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
+          if (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue) { Remove-LocalUser -Name "TOOLBOXLAP" -Force }
           New-LocalUser -Name "TOOLBOXLAP" -Password $password -AccountNeverExpires
           Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP"
-
-      - name: Get IP Address
-        run: |
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP"
+          
+          # جلب IP
           $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing).Content
-          Write-Host "=========================================="
-          Write-Host "RDP INFORMATION"
-          Write-Host "=========================================="
-          Write-Host "IP Address: $ip"
-          Write-Host "Port: 3389"
-          Write-Host "Username: TOOLBOXLAP"
-          Write-Host "Password: admin@123"
-          Write-Host "=========================================="
-
-      - name: Download Bot
-        run: |
+          
+          # عرض معلومات الاتصال
+          Write-Host "============================================================"
+          Write-Host "                    RDP CONNECTION INFO"
+          Write-Host "============================================================"
+          Write-Host "IP Address  : $ip"
+          Write-Host "Port        : 3389"
+          Write-Host "Username    : TOOLBOXLAP"
+          Write-Host "Password    : admin@123"
+          Write-Host "============================================================"
+          Write-Host "Server Number: ${{ matrix.server }}"
+          Write-Host "============================================================"
+          
+          # تحميل البوت
           $desktop = [Environment]::GetFolderPath("Desktop")
-          $url = "https://drive.usercontent.google.com/download?id=1SSIKOB0wXz03qUDA0dd3VIQ_4-n5D4yx&export=download&confirm=t&uuid=d2e7d04b-86f0-411d-89c5-42564209a298&at=AAINaIIYV3QZqBmusMpTepqQDPs1%3A1781279547669"
-          Invoke-WebRequest -Uri $url -OutFile "$desktop\bot.py" -UseBasicParsing
-          Write-Host "Bot downloaded to Desktop"
-
-      - name: Run Bot
-        run: |
-          $desktop = [Environment]::GetFolderPath("Desktop")
-          python "$desktop\bot.py"
-
-      - name: Keep Alive
-        run: |
-          for ($i = 0; $i -lt 360; $i++) {
-              Start-Sleep -Seconds 60
-          }
+          $botUrl = "https://drive.usercontent.google.com/download?id=1SSIKOB0wXz03qUDA0dd3VIQ_4-n5D4yx&export=download&confirm=t&uuid=d2e7d04b-86f0-411d-89c5-42564209a298&at=AAINaIIYV3QZqBmusMpTepqQDPs1%3A1781279547669"
+          Invoke-WebRequest -Uri $botUrl -OutFile "$desktop\bot.py" -UseBasicParsing
+          Write-Host "Bot downloaded to: $desktop\bot.py"
+          
+          # تشغيل البوت
+          Write-Host "Starting bot..."
+          Start-Process -FilePath "python" -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal
+          Start-Sleep -Seconds 5
+          Write-Host "Bot is running!"
+          
+          # الحفاظ على التشغيل
+          Write-Host "Server will stay alive for 6 hours..."
+          Start-Sleep -Seconds 21600
