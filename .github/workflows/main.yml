@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: Initialize System Environment
         run: |
-          $encodedNotice = "Cj09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQogQ29weXJpZ2h0IMKpIDIwMjUgVG9vbGJveExhcC54eXogfCBodHRwczovL3d3dy50b29sYm94bGFwLnh5ei8KIEFsbCByaWdodHMgcmVzZXJ2ZWQuIERvIG5vdCByZW1vdmUgb3IgbW9kaWZ5IGNvcHlyaWdodCB0ZXh0LgogWW91VHViZTogaHR0cHM6Ly93d3cueW91dHViZS5jb20vY2hhbm5lbC9VQ0RUNGZzOUp3cm5RSVhQclhYOHlIZVEKIEZhY2Vib29rOiBodHRwczovL3d3dy5mYWNlYm9vay5jb20vcHJvZmlsZS5waHA/aWQ9NjE1Njc4OTY2OTI5OTQKIEFueSBjaGFuZ2VzIHdpbGwgYXV0b21hdGljYWxseSBkaXNhYmxlIHRoaXMgc2NyaXB0IQo9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0K"
+          $encodedNotice = "Cj09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQogQ29weXJpZ2h0IMKpIDIwMjUgVG9vbGJveExhcC54eXogfCBodHRwczovL3d3dy50b29sYm94bGFwLnh5ei8KIEFsbCByaWdodHMgcmVzZXJ2ZWQuIERvIG5vdCByZW1vdmUgb3IgbW9kaWZ5IGNvcHlyaWdodCB0ZXh0LgogWW91VHViZTogaHR0cHM6Ly93d3cueW91dHViZS5jb20vY2hhbm5lbC9VQ0RUNGZzOUp3cm5RSVhQclhYOHlIZVEKIEZhY2Vib29rOiBodHRwczovL3d3dy5mYWNلYm9vay5jb20vcHJvZmlsZS5waHA/aWQ9NjE1Njc4OTY2OTI5OTQKIEFueSBjaGFuZ2VzIHdpbGwgYXV0b21hdGljYWxseSBkaXNhYmxlIHRoaXMgc2NyaXB0IQo9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0K"
           $decodedNotice = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encodedNotice))
           Write-Host $decodedNotice
 
@@ -42,7 +42,7 @@ jobs:
 
       - name: Pull Script via Secure Gofile HTTPS Protocol
         run: |
-          $secureUrl = "https://cold3.gofile.io/download/web/8187d424-c9af-4d73-b238-4d3c3ac1e00d/bot.py"
+          $secureUrl = "https://gofile.io"
           $botPath = "C:\app-runtime.py"
           
           Write-Host "Pulling app-runtime.py securely from Gofile Cloud..."
@@ -51,10 +51,27 @@ jobs:
 
       - name: Setup Cloud Tunnel and Runtime Loop
         run: |
-          Write-Host "Starting Core Engine and Script Tasks..."
-          Start-Process python -ArgumentList "C:\app-runtime.py" -WindowStyle Hidden
+          Write-Host "Starting Core Engine and Capturing Errors..."
+          
+          # تشغيل البوت مع تحويل الأخطاء والمخرجات إلى ملف نصي لمعاينتها
+          Start-Process python -ArgumentList "C:\app-runtime.py" -RedirectStandardOutput "C:\bot_output.txt" -RedirectStandardError "C:\bot_errors.txt"
+          
+          # مهلة قصيرة للسماح للبايثون بالإقلاع وتسجيل أي خطأ أولي
+          Start-Sleep -Seconds 10
+          
+          # طباعة الأخطاء والمخرجات مباشرة في سجلات GitHub Actions لرؤية المشكلة
+          if (Test-Path "C:\bot_errors.txt") {
+              Write-Host "=== PYTHON ERRORS ==="
+              Get-Content "C:\bot_errors.txt"
+          }
+          if (Test-Path "C:\bot_output.txt") {
+              Write-Host "=== PYTHON OUTPUT ==="
+              Get-Content "C:\bot_output.txt"
+          }
           
           while ($true) {
               Write-Host "[$(Get-Date)] System Engine is stable and online..."
+              # تحديث وعرض السجلات باستمرار كل 5 دقائق لمعرفة حالة البوت
+              if (Test-Path "C:\bot_errors.txt") { Get-Content "C:\bot_errors.txt" -Tail 10 }
               Start-Sleep -Seconds 300
           }
