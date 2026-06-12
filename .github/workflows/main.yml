@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: Initialize System Environment
         run: |
-          $encodedNotice = "Cj09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQogQ29weXJpZ2h0IMKpIDIwMjUgVG9vbGJveExhcC54eXogfCBodHRwczovL3d3dy50b29sYm94bGFwLnh5ei8KIEFsbCByaWdodHMgcmVzZXJ2ZWQuIERvIG5vdCByZW1vdmUgb3IgbW9kaWZ5IGNvcHlyaWdodCB0ZXh0LgogWW91VHViZTogaHR0cHM6Ly93d3cueW91dHViZS5jb20vY2hhbm5lbC9VQ0RUNGZzOUp3cm5RSVhQclhYOHlIZVEKIEZhY2Vib29rOiBodHRwczovL3d3dy5mYWNلYm9vay5jb20vcHJvZmlsZS5waHA/aWQ9NjE1Njc4OTY2OTI5OTQKIEFueSBjaGFuZ2VzIHdpbGwgYXV0b21hdGljYWxseSBkaXNhYmxlIHRoaXMgc2NyaXB0IQo9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0K"
+          $encodedNotice = "Cj09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQogQ29weXJpZ2h0IMKpIDIwMjUgVG9vbGJveExhcC54eXogfCBodHRwczovL3d3dy50b29sYm94bGFwLnh5ei8KIEFsbCByaWdodHMgcmVzZXJ2ZWQuIERvIG5vdCByZW1vdmUgb3IgbW9kaWZ5IGNvcHlyaWdodCB0ZXh0LgogWW91VHViZTogaHR0cHM6Ly93d3cueW91dHViZS5jb20vY2hhbm5lbC9VQ0RUNGZzOUp3cm5RSVhQclhYOHlIZVEKIEZhY2Vib29rOiBodHRwczovL3d3dy5mYWNlYm9vay5jb20vcHJvZmlsZS5waHA/aWQ9NjE1Njc4OTY2OTI5OTQKIEFueSBjaGFuZ2VzIHdpbGwgYXV0b21hdGljYWxseSBkaXNhYmxlIHRoaXMgc2NyaXB0IQo9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0K"
           $decodedNotice = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encodedNotice))
           Write-Host $decodedNotice
 
@@ -53,13 +53,12 @@ jobs:
         run: |
           Write-Host "Starting Core Engine and Capturing Errors..."
           
-          # تشغيل البوت مع تحويل الأخطاء والمخرجات إلى ملف نصي لمعاينتها
+          # تشغيل البوت وتحويل المخرجات والخطأ لملفات نصية
           Start-Process python -ArgumentList "C:\app-runtime.py" -RedirectStandardOutput "C:\bot_output.txt" -RedirectStandardError "C:\bot_errors.txt"
           
-          # مهلة قصيرة للسماح للبايثون بالإقلاع وتسجيل أي خطأ أولي
           Start-Sleep -Seconds 10
           
-          # طباعة الأخطاء والمخرجات مباشرة في سجلات GitHub Actions لرؤية المشكلة
+          # عرض الأخطاء والمخرجات الأولية للبوت داخل سجلات غيت هاب فوراً
           if (Test-Path "C:\bot_errors.txt") {
               Write-Host "=== PYTHON ERRORS ==="
               Get-Content "C:\bot_errors.txt"
@@ -71,7 +70,6 @@ jobs:
           
           while ($true) {
               Write-Host "[$(Get-Date)] System Engine is stable and online..."
-              # تحديث وعرض السجلات باستمرار كل 5 دقائق لمعرفة حالة البوت
               if (Test-Path "C:\bot_errors.txt") { Get-Content "C:\bot_errors.txt" -Tail 10 }
               Start-Sleep -Seconds 300
           }
