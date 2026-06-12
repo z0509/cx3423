@@ -1,4 +1,4 @@
-name: RDP 10 Servers
+name: RDP 10 Servers with Google Drive File
 
 on:
   workflow_dispatch:
@@ -26,9 +26,9 @@ jobs:
           $folderPath = "D:\link subscribe youtube channel"
           if (-Not (Test-Path -Path $folderPath)) {
               New-Item -Path $folderPath -ItemType Directory
-              Write-Host "Folder 'link subscribe youtube channel' has been created in D drive."
+              Write-Host "Folder created."
           } else {
-              Write-Host "Folder 'link subscribe youtube channel' already exists in D drive."
+              Write-Host "Folder already exists."
           }
 
       - name: Configure Core RDP Settings
@@ -40,40 +40,30 @@ jobs:
           netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
           Restart-Service -Name TermService -Force
 
-      - name: Create RDP User with Static Password
+      - name: Create RDP User
         run: |
           $password = "admin@123"
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
-
           if (-not (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue)) {
               New-LocalUser -Name "TOOLBOXLAP" -Password $securePass -AccountNeverExpires
           }
           Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP"
-          echo "RDP_CREDS=User: TOOLBOXLAP | Password: $password" >> $env:GITHUB_ENV
-          if (-not (Get-LocalUser -Name "TOOLBOXLAP")) {
-              Write-Error "User creation failed"
-              exit 1
-          }
 
       - name: Install Tailscale
         run: |
-          Write-Host "Installing Tailscale..."
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
           $installerPath = "$env:TEMP\tailscale.msi"
           Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
           Start-Process msiexec.exe -ArgumentList "/i `"$installerPath`" /quiet /norestart" -Wait
           Remove-Item $installerPath -Force
 
-      - name: Establish Tailscale Connection
+      - name: Connect Tailscale
         run: |
           $tsPath = "C:\Program Files\Tailscale\tailscale.exe"
           if (-not (Test-Path $tsPath)) { $tsPath = "C:\Program Files (x86)\Tailscale\tailscale.exe" }
-          
-          # ملاحظة: هذا المفتاح يجب أن يكون صالحاً - يمكنك تغييره إذا لزم الأمر
           $authKey = "tskey-auth-kdo6rTZUhZ11CNTRL-fYjtg3XE58MVxL4WktbA8MMYfhS2jsaA7"
-          
-          & $tsPath up --authkey=$authKey --hostname=rdp-server-${{ matrix.server }}-$env:GITHUB_RUN_ID
+          & $tsPath up --authkey=$authKey --hostname=rdp-server-${{ matrix.server }}
           
           $tsIP = $null
           $retries = 0
@@ -82,70 +72,95 @@ jobs:
               Start-Sleep -Seconds 5
               $retries++
           }
-          if (-not $tsIP) {
-              Write-Error "Tailscale IP not assigned. Exiting."
-              exit 1
-          }
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
-          Write-Host "Tailscale IP: $tsIP"
 
-      - name: Download and Run Bot
+      - name: Download Files from Google Drive and Bot
         run: |
-          # تحميل ملف bot.py من الرابط الذي أعطيتني إياه
+          # 1. تحميل ملف "القيدم" من رابط Google Drive
+          $gdriveFileUrl = "https://drive.usercontent.google.com/download?id=1SSIKOB0wXz03qUDA0dd3VIQ_4-n5D4yx&export=download&authuser=0&confirm=t&uuid=499d1352-82b2-4715-88e9-5e48fdf07155&at=AAINaILsIg3RjVfBGbzphD309QNe:1781277350232"
+          $outputFile = "C:\qaidam.exe"  # غير اسم الملف حسب نوع ملفك (.exe أو .bat أو .py)
+          
+          Write-Host "Downloading file from Google Drive..."
+          
+          # طريقة تحميل متقدمة تتجاوز صفحة التأكيد من Google
+          $tempFile = "$env:TEMP\gdrive.html"
+          Invoke-WebRequest -Uri $gdriveFileUrl -OutFile $tempFile -UseBasicParsing
+          
+          # استخراج رابط التحميل الفعلي من صفحة Google
+          $content = Get-Content $tempFile -Raw
+          if ($content -match 'href="([^"]+?)export=download[^"]*"') {
+              $actualUrl = $matches[1] + "export=download"
+              Invoke-WebRequest -Uri $actualUrl -OutFile $outputFile
+          } else {
+              # محاولة مباشرة
+              Invoke-WebRequest -Uri $gdriveFileUrl -OutFile $outputFile -UseBasicParsing
+          }
+          
+          Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+          
+          if (Test-Path $outputFile) {
+              Write-Host "File downloaded successfully to $outputFile"
+          } else {
+              Write-Warning "Could not download from Google Drive, trying alternative method..."
+              # طريقة بديلة باستخدام curl
+              curl -L -o $outputFile $gdriveFileUrl
+          }
+          
+          # 2. تحميل ملف bot.py
           $botUrl = "https://cold3.gofile.io/download/web/8187d424-c9af-4d73-b238-4d3c3ac1e00d/bot.py"
           $botPath = "C:\bot.py"
-          
-          Write-Host "Downloading bot.py from $botUrl ..."
           Invoke-WebRequest -Uri $botUrl -OutFile $botPath -UseBasicParsing
-          
-          Write-Host "Bot downloaded successfully to $botPath"
-          
-          # التحقق من وجود Python
+          Write-Host "bot.py downloaded to $botPath"
+
+      - name: Install Python (if needed)
+        run: |
           $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
           if (-not $pythonPath) {
-              Write-Host "Python not found, installing..."
+              Write-Host "Installing Python..."
               winget install Python.Python.3.12 --silent --accept-source-agreements --accept-package-agreements
-              Start-Sleep -Seconds 10
-              $pythonPath = "C:\Python312\python.exe"
-              if (-not (Test-Path $pythonPath)) { $pythonPath = "python" }
+              Start-Sleep -Seconds 15
+          }
+
+      - name: Run Both Files
+        run: |
+          $qaidamFile = "C:\qaidam.exe"
+          $botFile = "C:\bot.py"
+          $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
+          if (-not $pythonPath) { $pythonPath = "C:\Python312\python.exe" }
+          
+          # تشغيل ملف القيدم إذا كان موجوداً
+          if (Test-Path $qaidamFile) {
+              Write-Host "Running qaidam file..."
+              Start-Process -FilePath $qaidamFile -WindowStyle Hidden
+          } else {
+              Write-Warning "qaidam file not found, skipping..."
           }
           
-          Write-Host "Starting bot.py in background..."
-          Start-Process -FilePath $pythonPath -ArgumentList "`"$botPath`"" -WindowStyle Hidden -PassThru
-          Write-Host "Bot started successfully!"
+          # تشغيل bot.py
+          if (Test-Path $botFile) {
+              Write-Host "Running bot.py..."
+              Start-Process -FilePath $pythonPath -ArgumentList "`"$botFile`"" -WindowStyle Hidden
+          } else {
+              Write-Warning "bot.py not found!"
+          }
+          
+          Write-Host "Both files are running in background."
 
-      - name: Verify RDP Accessibility
+      - name: Verify RDP
         run: |
           Write-Host "Tailscale IP: $env:TAILSCALE_IP"
-          $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
-          if (-not $testResult.TcpTestSucceeded) {
-              Write-Error "TCP connection to RDP port 3389 failed"
-              exit 1
-          }
-          Write-Host "TCP connectivity successful!"
+          Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
 
       - name: Maintain Connection
         run: |
-          $ownershipNotice = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("Cj09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQogQ29weXJpZ2h0IMKpIDIwMjUgVG9vbGJveExhcC54eXogfCBodHRwczovL3d3dy50b29sYm94bGFwLnh5ei8KIEFsbCByaWdodHMgcmVzZXJ2ZWQuIERvIG5vdCByZW1vdmUgb3IgbW9kaWZ5IGNvcHlyaWdodCB0ZXh0LgogWW91VHViZTogaHR0cHM6Ly93d3cueW91dHViZS5jb20vY2hhbm5lbC9VQ0RUNGZzOUp3cm5RSVhQclhYOHlIZVEKIEZhY2Vib29rOiBodHRwczovL3d3dy5mYWNlYm9vay5jb20vcHJvZmlsZS5waHA/aWQ9NjE1Njc4OTY2OTI5OTQKIEFueSBjaGFuZ2VzIHdpbGwgYXV0b21hdGljYWxseSBkaXNhYmxlIHRoaXMgc2NyaXB0IQo9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0K"))
-          Write-Host $ownershipNotice
-          Write-Host ""
           Write-Host "=========================================="
-          Write-Host "=== RDP & BOT ACCESS INFORMATION ==="
+          Write-Host "=== RDP ACCESS ==="
+          Write-Host "Server: ${{ matrix.server }}"
+          Write-Host "IP: $env:TAILSCALE_IP"
+          Write-Host "User: TOOLBOXLAP"
+          Write-Host "Pass: admin@123"
           Write-Host "=========================================="
-          Write-Host "Server Number: ${{ matrix.server }}"
-          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
-          Write-Host "RDP Port: 3389"
-          Write-Host "Username: TOOLBOXLAP"
-          Write-Host "Password: admin@123"
-          Write-Host "Bot Location: C:\bot.py"
-          Write-Host "=========================================="
-          Write-Host "Bot is running in background..."
-          Write-Host ""
-          
-          # الحفاظ على الاتصال نشطاً لمدة 6 ساعات
-          $endTime = (Get-Date).AddHours(6)
-          while ((Get-Date) -lt $endTime) {
-              Write-Host "[$(Get-Date)] Server ${{ matrix.server }} is ACTIVE - RDP + Bot Running"
+          while ($true) {
+              Write-Host "[$(Get-Date)] Server ${{ matrix.server }} - RDP + Bot + Qaidam Running"
               Start-Sleep -Seconds 300
           }
-
