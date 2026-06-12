@@ -11,106 +11,44 @@ jobs:
       matrix:
         server: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
-      - name: إعداد سطح المكتب
-        run: |
-          $desktop = [Environment]::GetFolderPath("Desktop")
-          Write-Host "سطح المكتب موجود في: $desktop"
-
-      - name: تفعيل سطح المكتب البعيد RDP
+      - name: Enable RDP
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
-          netsh advfirewall firewall delete rule name="RDP" 2>$null
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
           Restart-Service TermService -Force
-          Write-Host "RDP مفعل وجاهز"
 
-      - name: إنشاء مستخدم RDP
+      - name: Create User
         run: |
-          $password = "admin@123"
-          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
-          
-          if (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue) {
-              Remove-LocalUser -Name "TOOLBOXLAP" -Force
-          }
-          
-          New-LocalUser -Name "TOOLBOXLAP" -Password $securePass -AccountNeverExpires -PasswordNeverExpires
+          $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
+          New-LocalUser -Name "TOOLBOXLAP" -Password $password -AccountNeverExpires
           Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP"
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP"
-          
-          Write-Host "المستخدم TOOLBOXLAP تم إنشاؤه"
-          Write-Host "الباسورد: admin@123"
 
-      - name: جلب عنوان IP الخاص بالخادم
+      - name: Get IP Address
         run: |
-          $publicIP = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing).Content
+          $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing).Content
           Write-Host "=========================================="
-          Write-Host "معلومات الاتصال بـ RDP:"
-          Write-Host "IP: $publicIP"
+          Write-Host "RDP INFORMATION"
+          Write-Host "=========================================="
+          Write-Host "IP Address: $ip"
           Write-Host "Port: 3389"
           Write-Host "Username: TOOLBOXLAP"
           Write-Host "Password: admin@123"
           Write-Host "=========================================="
-          
-          echo "RDP_IP=$publicIP" >> $env:GITHUB_ENV
 
-      - name: تحميل ملف bot.py إلى سطح المكتب
+      - name: Download Bot
         run: |
           $desktop = [Environment]::GetFolderPath("Desktop")
-          $botPath = "$desktop\bot.py"
-          $botUrl = "https://drive.usercontent.google.com/download?id=1SSIKOB0wXz03qUDA0dd3VIQ_4-n5D4yx&export=download&confirm=t&uuid=d2e7d04b-86f0-411d-89c5-42564209a298&at=AAINaIIYV3QZqBmusMpTepqQDPs1%3A1781279547669"
-          
-          Write-Host "جاري تحميل البوت من الرابط..."
-          Invoke-WebRequest -Uri $botUrl -OutFile $botPath -UseBasicParsing
-          
-          if (Test-Path $botPath) {
-              Write-Host "تم تحميل البوت بنجاح إلى: $botPath"
-              echo "BOT_PATH=$botPath" >> $env:GITHUB_ENV
-          } else {
-              Write-Error "فشل تحميل البوت"
-              exit 1
-          }
+          $url = "https://drive.usercontent.google.com/download?id=1SSIKOB0wXz03qUDA0dd3VIQ_4-n5D4yx&export=download&confirm=t&uuid=d2e7d04b-86f0-411d-89c5-42564209a298&at=AAINaIIYV3QZqBmusMpTepqQDPs1%3A1781279547669"
+          Invoke-WebRequest -Uri $url -OutFile "$desktop\bot.py" -UseBasicParsing
+          Write-Host "Bot downloaded to Desktop"
 
-      - name: تثبيت بايثون إذا لم تكن موجودة
+      - name: Run Bot
         run: |
-          $pythonCheck = Get-Command python -ErrorAction SilentlyContinue
-          if (-not $pythonCheck) {
-              Write-Host "جاري تثبيت بايثون..."
-              $pythonInstaller = "$env:TEMP\python.exe"
-              Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $pythonInstaller -UseBasicParsing
-              Start-Process -FilePath $pythonInstaller -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0" -Wait
-              Remove-Item $pythonInstaller -Force
-              Start-Sleep -Seconds 5
-              Write-Host "تم تثبيت بايثون"
-          } else {
-              Write-Host "بايثون مثبتة مسبقاً"
-          }
+          $desktop = [Environment]::GetFolderPath("Desktop")
+          python "$desktop\bot.py"
 
-      - name: تشغيل البوت
+      - name: Keep Alive
         run: |
-          $botPath = "$env:BOT_PATH"
-          if (-not $botPath) {
-              $desktop = [Environment]::GetFolderPath("Desktop")
-              $botPath = "$desktop\bot.py"
-          }
-          
-          Write-Host "جاري تشغيل البوت..."
-          Start-Process -FilePath "python" -ArgumentList "`"$botPath`"" -WindowStyle Normal
-          Start-Sleep -Seconds 3
-          Write-Host "تم تشغيل البوت بنجاح!"
-
-      - name: الحفاظ على تشغيل الخادم لمدة 6 ساعات
-        run: |
-          Write-Host "=========================================="
-          Write-Host "الخادم شغال الآن لمدة 6 ساعات"
-          Write-Host "يمكنك الاتصال عبر RDP على IP: $env:RDP_IP"
-          Write-Host "المستخدم: TOOLBOXLAP"
-          Write-Host "الباسورد: admin@123"
-          Write-Host "البوت شغال على سطح المكتب"
-          Write-Host "=========================================="
-          
-          $endTime = (Get-Date).AddHours(6)
-          while ((Get-Date) -lt $endTime) {
-              Start-Sleep -Seconds 300
-              Write-Host "[$(Get-Date)] الخادم والبوت شغالين..."
+          for ($i = 0; $i -lt 360; $i++) {
+              Start-Sleep -Seconds 60
           }
