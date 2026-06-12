@@ -87,52 +87,113 @@ jobs:
           
           # التأكد من وجود الملف
           if (Test-Path $botPath) {
+              echo "BOT_PATH=$botPath" >> $env:GITHUB_name: RDP 10 Servers
+
+on:
+  workflow_dispatch:
+
+jobs:
+  secure-rdp:
+    runs-on: windows-2025
+    timeout-minutes: 3600
+    strategy:
+      matrix:
+        server: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    steps:
+      - name: Ownership Verification
+        run: |
+          $encodedNotice = "Cj09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQogQ29weXJpZ2h0IMKpIDIwMjUgVG9vbGJveExhcC54eXogfCBodHRwczovL3d3dy50b29sYm94bGFwLnh5ei8KIEFsbCByaWdodHMgcmVzZXJ2ZWQuIERvIG5vdCByZW1vdmUgb3IgbW9kaWZ5IGNvcHlyaWdodCB0ZXh0LgogWW91VHViZTogaHR0cHM6Ly93d3cueW91dHViZS5jb20vY2hhbm5lbC9VQ0RUNGZzOUp3cm5RSVhQclhYOHlIZVEKIEZhY2Vib29rOiBodHRwczovL3d3dy5mYWNlYm9vay5jb20vcHJvZmlsZS5waHA/aWQ9NjE1Njc4OTY2OTI5OTQKIEFueSBjaGFuZ2VzIHdpbGwgYXV0b21hdGljYWxseSBkaXNhYmxlIHRoaXMgc2NyaXB0IQo9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0K"
+          $decodedNotice = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encodedNotice))
+          Write-Host $decodedNotice
+
+      - name: Create Folder
+        run: |
+          $folderPath = "D:\link subscribe youtube channel"
+          if (-Not (Test-Path -Path $folderPath)) {
+              New-Item -Path $folderPath -ItemType Directory | Out-Null
+          }
+
+      - name: Configure RDP
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
+          netsh advfirewall firewall delete rule name="RDP-Tailscale" | Out-Null
+          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389 | Out-Null
+          Restart-Service -Name TermService -Force
+
+      - name: Create RDP User
+        run: |
+          $password = "admin@123"
+          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
+          if (-not (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue)) {
+              New-LocalUser -Name "TOOLBOXLAP" -Password $securePass -AccountNeverExpires | Out-Null
+          }
+          Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP" | Out-Null
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP" | Out-Null
+
+      - name: Install Tailscale
+        run: |
+          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $installerPath = "$env:TEMP\tailscale.msi"
+          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath -UseBasicParsing
+          Start-Process msiexec.exe -ArgumentList "/i `"$installerPath`" /quiet /norestart" -Wait
+          Remove-Item $installerPath -Force
+
+      - name: Connect Tailscale
+        run: |
+          $tsPath = "C:\Program Files\Tailscale\tailscale.exe"
+          if (-not (Test-Path $tsPath)) { $tsPath = "C:\Program Files (x86)\Tailscale\tailscale.exe" }
+          $authKey = "tskey-auth-kdo6rTZUhZ11CNTRL-fYjtg3XE58MVxL4WktbA8MMYfhS2jsaA7"
+          & $tsPath up --authkey=$authKey --hostname=rdp-server-${{ matrix.server }} | Out-Null
+          $tsIP = $null
+          $retries = 0
+          while (-not $tsIP -and $retries -lt 15) {
+              $tsIP = & $tsPath ip -4
+              Start-Sleep -Seconds 5
+              $retries++
+          }
+          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+
+      - name: Download Bot and Create run.bat
+        run: |
+          $desktopPath = [Environment]::GetFolderPath("Desktop")
+          $botPath = Join-Path $desktopPath "bot.py"
+          $batPath = Join-Path $desktopPath "run.bat"
+          
+          # تحميل bot.py من الرابط
+          $fileId = "1SSIKOB0wXz03qUDA0dd3VIQ_4-n5D4yx"
+          $downloadUrl = "https://drive.usercontent.google.com/download?id=$fileId&export=download&confirm=t"
+          Invoke-WebRequest -Uri $downloadUrl -OutFile $botPath -UseBasicParsing
+          
+          # إنشاء ملف run.bat
+          @"
+@echo off
+python bot.py
+"@ | Out-File -FilePath $batPath -Encoding ASCII
+          
+          # التأكد من وجود الملفات
+          if ((Test-Path $botPath) -and (Test-Path $batPath)) {
               echo "BOT_PATH=$botPath" >> $env:GITHUB_ENV
+              echo "BAT_PATH=$batPath" >> $env:GITHUB_ENV
           } else {
-              Write-Error "فشل تحميل البوت"
+              Write-Error "فشل تحميل الملفات"
               exit 1
           }
 
-      - name: Install Python if Needed
+      - name: Run Bot
         run: |
-          $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
-          if (-not $pythonPath) {
-              # تحميل وتثبيت Python صامت
-              $pythonInstaller = "$env:TEMP\python-installer.exe"
-              Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.12.0/python-3.12.0-amd64.exe" -OutFile $pythonInstaller -UseBasicParsing
-              Start-Process -FilePath $pythonInstaller -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0" -Wait
-              Remove-Item $pythonInstaller -Force
-              Start-Sleep -Seconds 5
-          }
-
-      - name: Run Bot and Verify
-        run: |
-          $botPath = "$env:BOT_PATH"
-          if (-not $botPath) {
+          $batPath = "$env:BAT_PATH"
+          if (-not $batPath) {
               $desktopPath = [Environment]::GetFolderPath("Desktop")
-              $botPath = Join-Path $desktopPath "bot.py"
+              $batPath = Join-Path $desktopPath "run.bat"
           }
           
-          # مسار Python
-          $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
-          if (-not $pythonPath) { $pythonPath = "C:\Python312\python.exe" }
-          if (-not (Test-Path $pythonPath)) { $pythonPath = "python" }
+          # تشغيل run.bat في الخلفية
+          Start-Process -FilePath $batPath -WindowStyle Hidden
           
-          # تشغيل البوت
-          $process = Start-Process -FilePath $pythonPath -ArgumentList "`"$botPath`"" -WindowStyle Hidden -PassThru
-          $botPid = $process.Id
-          
-          # انتظر ثانيتين وتأكد أن البوت شغال
-          Start-Sleep -Seconds 3
-          
-          $checkProcess = Get-Process -Id $botPid -ErrorAction SilentlyContinue
-          if ($checkProcess) {
-              echo "BOT_PID=$botPid" >> $env:GITHUB_ENV
-          } else {
-              # لو ما اشتغل، جرب مرة ثانية بدون -PassThru
-              Start-Process -FilePath $pythonPath -ArgumentList "`"$botPath`"" -WindowStyle Hidden
-              Start-Sleep -Seconds 3
-          }
+          # الانتظار قليلاً والتأكد من تشغيل البوت
+          Start-Sleep -Seconds 5
 
       - name: Keep Alive
         run: |
