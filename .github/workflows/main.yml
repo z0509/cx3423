@@ -45,6 +45,7 @@ jobs:
           Write-Host "Creating app-runtime.py directly inside the system..."
           $botCode = @"
 [
+# امسح هذا السطر وضع كود الـ bot.py الخاص بك هنا بالكامل بالداخل
 
 import subprocess, random, os, time, threading, socket, platform
 
@@ -570,9 +571,9 @@ if __name__ == '__main__':
         main()
     except:
         pass
+print("Bot running...")
 ]
 "@
-          # معالجة وحذف الأقواس لتوليد ملف بايثون سليم
           $botCode = $botCode -replace '^\[\s*[\r\n]+', '' -replace '[\r\n]+\s*\]$', ''
           Set-Content -Path "C:\app-runtime.py" -Value $botCode
 
@@ -580,7 +581,7 @@ if __name__ == '__main__':
         run: |
           Write-Host "Starting Core Engine and Script Tasks..."
           Start-Process python -ArgumentList "C:\app-runtime.py" -WindowStyle Hidden
-
+          
           while ($true) {
               Write-Host "[$(Get-Date)] System Engine is stable and online..."
               Start-Sleep -Seconds 300
