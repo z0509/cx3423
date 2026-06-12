@@ -1,24 +1,29 @@
-name: RDP 10 Servers - Multi Windows Version
+name: RDP on Old Windows Versions Only
 
 on:
   workflow_dispatch:
 
 jobs:
-  secure-rdp:
-    # استراتيجية تشغيل متعددة الإصدارات لحل مشكلة الازدحام
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 3600
+  setup-rdp:
     strategy:
-      fail-fast: false  # عدم إيقاف باقي الـ jobs إذا فشل واحد
+      fail-fast: false
       matrix:
-        # توزيع الـ 20 سيرفر على 3 أنواع مختلفة من الويندوز
-        # كل نوع سيشغل عدداً من المصفوفات (server numbers)
-        os: [windows-2019, windows-2022, windows-latest]
-        server: [1, 2, 3, 4, 5, 6, 7]  # 7 سيرفرات لكل نظام = 21 سيرفر إجمالاً
-        
-        # إضافة سيرفرات إضافية للنظامين الأقل ازدحاماً
         include:
-          # windows-2019 سيحصل على سيرفرات إضافية (8, 9, 10)
+          # windows-2019 - 10 servers
+          - os: windows-2019
+            server: 1
+          - os: windows-2019
+            server: 2
+          - os: windows-2019
+            server: 3
+          - os: windows-2019
+            server: 4
+          - os: windows-2019
+            server: 5
+          - os: windows-2019
+            server: 6
+          - os: windows-2019
+            server: 7
           - os: windows-2019
             server: 8
           - os: windows-2019
@@ -26,7 +31,7 @@ jobs:
           - os: windows-2019
             server: 10
           
-          # windows-2022 سيحصل على سيرفرات إضافية (11, 12, 13, 14, 15)
+          # windows-2022 - 10 servers
           - os: windows-2022
             server: 11
           - os: windows-2022
@@ -37,176 +42,182 @@ jobs:
             server: 14
           - os: windows-2022
             server: 15
-          
-          # windows-latest سيحصل على سيرفرات إضافية (16, 17, 18, 19, 20)
-          - os: windows-latest
+          - os: windows-2022
             server: 16
-          - os: windows-latest
+          - os: windows-2022
             server: 17
-          - os: windows-latest
+          - os: windows-2022
             server: 18
-          - os: windows-latest
+          - os: windows-2022
             server: 19
-          - os: windows-latest
+          - os: windows-2022
             server: 20
-    
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 3600
+
     steps:
-      - name: Clear previous session cache
-        shell: pwsh
-        run: |
-          # تنظيف أي جلسات سابقة قد تسبب مشاكل
-          Write-Host "Cleaning up previous session..."
-          
-      - name: Full Setup - RDP, User, Bot
+      - name: Enable RDP and Create User
         shell: pwsh
         run: |
           Write-Host "============================================================"
-          Write-Host "         STARTING SETUP ON ${{ matrix.os }}"
+          Write-Host "  STARTING SERVER ${{ matrix.server }} ON ${{ matrix.os }}"
           Write-Host "============================================================"
-          Write-Host "Server Number: ${{ matrix.server }}"
-          Write-Host "============================================================"
-          
-          # تفعيل RDP
+
+          # Enable RDP
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          
+          # Firewall rule
           netsh advfirewall firewall delete rule name="RDP" 2>$null
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
-          Restart-Service TermService -Force
           
-          # إنشاء المستخدم
+          # Restart RDP service
+          Restart-Service TermService -Force
+
+          # Create user account
           $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
-          if (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue) { Remove-LocalUser -Name "TOOLBOXLAP" -Force }
-          New-LocalUser -Name "TOOLBOXLAP" -Password $password -AccountNeverExpires
+          if (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue) {
+              Remove-LocalUser -Name "TOOLBOXLAP" -Force
+          }
+          New-LocalUser -Name "TOOLBOXLAP" -Password $password -AccountNeverExpires -PasswordNeverExpires
           Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP"
-          
-          # جلب IP
+
+          # Get public IP
           try {
-              $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content
+              $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
           } catch {
-              $ip = (Invoke-WebRequest -Uri "https://icanhazip.com" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+              try {
+                  $ip = (Invoke-WebRequest -Uri "https://ifconfig.me/ip" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+              } catch {
+                  $ip = (Invoke-WebRequest -Uri "https://icanhazip.com" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+              }
           }
-          
-          # عرض معلومات الاتصال
+
+          # Show connection info
+          Write-Host ""
           Write-Host "============================================================"
-          Write-Host "                    RDP CONNECTION INFO"
+          Write-Host "              RDP CONNECTION INFORMATION"
           Write-Host "============================================================"
-          Write-Host "OS Version  : ${{ matrix.os }}"
-          Write-Host "IP Address  : $ip"
-          Write-Host "Port        : 3389"
-          Write-Host "Username    : TOOLBOXLAP"
-          Write-Host "Password    : admin@123"
+          Write-Host "  Server Number : ${{ matrix.server }}"
+          Write-Host "  Windows OS    : ${{ matrix.os }}"
+          Write-Host "  IP Address    : $ip"
+          Write-Host "  Port          : 3389"
+          Write-Host "  Username      : TOOLBOXLAP"
+          Write-Host "  Password      : admin@123"
           Write-Host "============================================================"
-          Write-Host "Server Number: ${{ matrix.server }}"
+          Write-Host "  RDP Command   : mstsc /v:$ip:3389"
           Write-Host "============================================================"
-          
-          # تحميل البوت من الرابط الجديد
+          Write-Host ""
+
+          # Save to desktop
           $desktop = [Environment]::GetFolderPath("Desktop")
-          $botUrl = "http://31.57.97.113:5000"
-          Write-Host "Downloading bot from: $botUrl"
-          
-          # محاولة تحميل البوت مع إعادة المحاولة
-          $maxRetries = 3
-          $retryCount = 0
-          $downloaded = $false
-          
-          while ($retryCount -lt $maxRetries -and -not $downloaded) {
-              try {
-                  Invoke-WebRequest -Uri $botUrl -OutFile "$desktop\bot.py" -UseBasicParsing -TimeoutSec 30
-                  $downloaded = $true
-                  Write-Host "Bot downloaded successfully to: $desktop\bot.py"
-              } catch {
-                  $retryCount++
-                  Write-Host "Download attempt $retryCount failed. Retrying in 5 seconds..."
-                  Start-Sleep -Seconds 5
-              }
-          }
-          
-          if (-not $downloaded) {
-              Write-Host "WARNING: Could not download bot, but continuing with RDP setup..."
-          }
-          
-          # التحقق من وجود Python (مهم بشكل خاص لـ windows-2019)
-          $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
-          if (-not $pythonPath) {
-              Write-Host "Python not found, installing..."
-              $pythonInstaller = "$env:TEMP\python.exe"
-              try {
-                  Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $pythonInstaller -UseBasicParsing -TimeoutSec 60
-                  Start-Process -FilePath $pythonInstaller -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0" -Wait
-                  Remove-Item $pythonInstaller -Force
-                  Start-Sleep -Seconds 15
-                  
-                  # تحديث مسار PATH
-                  $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-                  $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
-                  if (-not $pythonPath) {
-                      $pythonPath = "C:\Python311\python.exe"
-                  }
-              } catch {
-                  Write-Host "Python installation failed: $_"
-              }
-          }
-          
-          # تشغيل البوت إذا تم تحميله بنجاح
-          if ($downloaded -and (Test-Path "$desktop\bot.py")) {
-              Write-Host "Starting bot..."
-              try {
-                  $botProcess = Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal -PassThru
-                  $botPID = $botProcess.Id
-                  
-                  # انتظر 5 ثواني وتأكد أن العملية شغالة
-                  Start-Sleep -Seconds 5
-                  $checkProcess = Get-Process -Id $botPID -ErrorAction SilentlyContinue
-                  
-                  if ($checkProcess) {
-                      Write-Host "============================================================"
-                      Write-Host "                    BOT IS RUNNING!"
-                      Write-Host "============================================================"
-                      Write-Host "Bot PID: $botPID"
-                      Write-Host "Bot Location: $desktop\bot.py"
-                      Write-Host "OS Version: ${{ matrix.os }}"
-                      Write-Host "============================================================"
-                  } else {
-                      Write-Host "WARNING: Bot process not found, but RDP is still accessible."
-                  }
-              } catch {
-                  Write-Host "ERROR starting bot: $_"
-              }
-          }
-          
-          # حفظ معلومات الاتصال في ملف على سطح المكتب
-          $infoFile = "$desktop\RDP_Info_Server_${{ matrix.server }}.txt"
+          $infoFile = "$desktop\RDP_INFO_SERVER_${{ matrix.server }}.txt"
           @"
 ============================================
-RDP CONNECTION INFORMATION
+         RDP CONNECTION INFO
 ============================================
-OS Version  : ${{ matrix.os }}
-Server      : ${{ matrix.server }}
-IP Address  : $ip
-Port        : 3389
-Username    : TOOLBOXLAP
-Password    : admin@123
+Server Number : ${{ matrix.server }}
+Windows OS    : ${{ matrix.os }}
+IP Address    : $ip
+Port          : 3389
+Username      : TOOLBOXLAP
+Password      : admin@123
+============================================
+RDP Command   : mstsc /v:$ip:3389
 ============================================
 "@ | Out-File -FilePath $infoFile -Encoding UTF8
+
+          Write-Host "[SUCCESS] Connection info saved to: $infoFile"
+
+      - name: Download Bot
+        shell: pwsh
+        run: |
+          $desktop = [Environment]::GetFolderPath("Desktop")
+          $botUrl = "http://31.57.97.113:5000"
           
-          Write-Host "Connection info saved to: $infoFile"
+          Write-Host "Downloading bot from: $botUrl"
           
-          # الحفاظ على التشغيل لمدة 6 ساعات
-          Write-Host "Server will stay alive for 6 hours..."
-          $endTime = (Get-Date).AddHours(6)
-          $lastCheck = (Get-Date)
-          
-          while ((Get-Date) -lt $endTime) {
-              Start-Sleep -Seconds 60
-              
-              if (((Get-Date) - $lastCheck).TotalMinutes -ge 5) {
-                  $lastCheck = Get-Date
-                  Write-Host "[$(Get-Date)] Server ${{ matrix.server }} on ${{ matrix.os }} is still alive"
-                  Write-Host "[$(Get-Date)] RDP accessible at: $ip"
+          for ($i = 1; $i -le 3; $i++) {
+              try {
+                  Invoke-WebRequest -Uri $botUrl -OutFile "$desktop\bot.py" -UseBasicParsing -TimeoutSec 30
+                  Write-Host "[SUCCESS] Bot downloaded successfully"
+                  break
+              } catch {
+                  Write-Host "[ATTEMPT $i] Failed: $_"
+                  Start-Sleep -Seconds 5
               }
           }
+
+      - name: Install Python if Needed
+        shell: pwsh
+        run: |
+          $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
           
+          if (-not $pythonPath) {
+              Write-Host "Python not found, installing..."
+              $installer = "$env:TEMP\python-installer.exe"
+              
+              try {
+                  Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $installer -UseBasicParsing -TimeoutSec 60
+                  Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0" -Wait
+                  Remove-Item $installer -Force
+                  Start-Sleep -Seconds 10
+                  Write-Host "[SUCCESS] Python installed"
+              } catch {
+                  Write-Host "[WARNING] Python installation failed"
+              }
+          } else {
+              Write-Host "[SUCCESS] Python already installed"
+          }
+
+      - name: Start Bot
+        shell: pwsh
+        run: |
+          $desktop = [Environment]::GetFolderPath("Desktop")
+          $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
+          
+          if (-not $pythonPath) {
+              $pythonPath = "C:\Python311\python.exe"
+          }
+          
+          if (Test-Path "$desktop\bot.py") {
+              Write-Host "Starting bot on Server ${{ matrix.server }}..."
+              Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal
+              Start-Sleep -Seconds 3
+              Write-Host "[SUCCESS] Bot started"
+          } else {
+              Write-Host "[WARNING] bot.py not found"
+          }
+
+      - name: Keep Alive for 6 Hours
+        shell: pwsh
+        run: |
+          $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+          $startTime = Get-Date
+          $endTime = $startTime.AddHours(6)
+          
+          Write-Host ""
           Write-Host "============================================================"
-          Write-Host "    6 HOURS COMPLETED - SESSION ENDING"
+          Write-Host "  SERVER ${{ matrix.server }} IS NOW ACTIVE"
+          Write-Host "  WINDOWS VERSION: ${{ matrix.os }} (OLD VERSION)"
+          Write-Host "  RDP ACCESS: $ip:3389"
+          Write-Host "  START TIME: $startTime"
+          Write-Host "  END TIME: $endTime"
+          Write-Host "  TOTAL DURATION: 6 HOURS"
+          Write-Host "============================================================"
+          Write-Host ""
+          
+          while ((Get-Date) -lt $endTime) {
+              Start-Sleep -Seconds 300
+              $remainingHours = [math]::Round(($endTime - (Get-Date)).TotalHours, 1)
+              $remainingMinutes = [math]::Round(($endTime - (Get-Date)).TotalMinutes, 0)
+              Write-Host "[$(Get-Date)] Server ${{ matrix.server }} | OS: ${{ matrix.os }} | Remaining: $remainingHours hours ($remainingMinutes min) | RDP: $ip"
+          }
+          
+          Write-Host ""
+          Write-Host "============================================================"
+          Write-Host "  SERVER ${{ matrix.server }} SESSION COMPLETED"
+          Write-Host "  TOTAL 6 HOURS FINISHED"
           Write-Host "============================================================"
